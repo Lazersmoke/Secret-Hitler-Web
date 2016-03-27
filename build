@@ -1,0 +1,2 @@
+ghc --make -Wall -o Secret Secret.hs
+rm *.hi *.o
