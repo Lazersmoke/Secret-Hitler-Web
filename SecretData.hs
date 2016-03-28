@@ -6,7 +6,7 @@ data StopCode = Victory Team deriving (Show,Eq,Read)
 type ServerState = ([GameState],[Client])
 data Client = Client {cliName :: String, cliConn :: WS.Connection, cliComms :: [String]}
 data Identity = Hitler | NotHitler Team | NoIdentity deriving (Show,Eq,Read)
-data Player = Player {secretIdentity :: Identity, name :: String, conn :: WS.Connection} | DummyPlayer
+data Player = Player {secretIdentity :: Identity, name :: String, conn :: WS.Connection, playerReady :: Bool} | DummyPlayer
 data Policy = Policy Team deriving (Show,Eq,Read)
 data Vote = Ja | Nein deriving (Show,Eq,Read)
 data Team = Liberal | Fascist deriving (Show,Eq,Read)
@@ -19,7 +19,7 @@ instance Eq Client where
 
 instance Show Player where
   show DummyPlayer = "<Dummy Player>"
-  show pla = "Player: " ++ name pla ++ "/" ++ (show . secretIdentity $ pla)
+  show pla = "Player: " ++ name pla ++ "/" ++ (show . secretIdentity $ pla) ++ (show . playerReady $ pla)
 
 instance Eq Player where
   (==) DummyPlayer DummyPlayer = True

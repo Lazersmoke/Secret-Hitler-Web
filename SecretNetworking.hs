@@ -40,20 +40,20 @@ connHandler state connection = do
           debugLogClient (cliName client) "Sending Bad" 
           WS.sendTextData accepted ("Wrong message prefix, disconnecting" :: T.Text) 
           disconnect
-      | elem (cliName client) $ bannedNames ++ map cliName (snd st) -> do
+      | any (`elem` cliName client) bannedChars || elem (cliName client) (bannedNames ++ map cliName (snd st)) -> do
           debugLog $ "Client attempted to join with bad username: " ++ cliName client
-          WS.sendTextData accepted ("Bad username" :: T.Text)
+          WS.sendTextData accepted ("Info|Bad username" :: T.Text)
           disconnect
       -- Make new shard
       | shard == "New" -> flip finally disconnect $ do
           -- Generate a fresh shard for this player, with only them in it
           gen <- newStdGen
-          let newshard = newGameState [Player {secretIdentity = NoIdentity, name = cliName client, conn = cliConn client}] gen
+          let newshard = newGameState [Player {secretIdentity = NoIdentity, playerReady = False, name = cliName client, conn = cliConn client}] gen
           debugLogClient (cliName client) $ "Spawning new shard " ++ shardName newshard 
-          modifyMVar_ state $ \s -> do
+          modifyMVar_ state $ \s -> return (newshard : fst s, client : snd s)
             --Don't need to broadcast join into new shard
-            WS.sendTextData accepted (T.pack $ "Join|" ++ cliName client)
-            return (newshard : fst s, client : snd s)
+            
+          WS.sendTextData accepted (T.pack $ "Join|" ++ cliName client)
           WS.sendTextData accepted $ T.pack ("Connected to: " ++ shardName newshard)
           waitForGame (cliConn client) state client
       -- Invalid shard
@@ -68,7 +68,7 @@ connHandler state connection = do
           modifyMVar_ state $ \s -> do
             -- On the clock now
             let oldstate = head $ filter ((==shard) . shardName) (fst s)
-            let newstate = oldstate {players = Player{secretIdentity = NoIdentity, conn = cliConn client, name = cliName client}:players oldstate}
+            let newstate = oldstate {players = Player{secretIdentity = NoIdentity, playerReady = False, conn = cliConn client, name = cliName client}:players oldstate}
             --Broadcast our connection to everyone else
             mapM_ (flip WS.sendTextData (T.pack $ "Join|" ++ cliName client) . conn) $ players oldstate
             --Retrocast everyone elses connection to our connection
@@ -77,7 +77,8 @@ connHandler state connection = do
           waitForGame (cliConn client) state client
  
       where
-        bannedNames = ["Ja","Nein","Hitler","NotHitler","Join","Ask"]
+        bannedNames = ["Ja","Nein","Info","Join","Ask"," ","","|",","]
+        bannedChars = ['|',',','\"','\'']
         shard = T.unpack shardChoice
         prefix = T.pack "Hi! I am "
         client = Client {cliComms = [], cliName = T.unpack $ T.drop (T.length prefix) msg, cliConn = accepted}
@@ -96,10 +97,12 @@ waitForGame connection state client = forever $ do
   when (T.unpack msg == "debug") $ do
     st <- readMVar state
     debugLog $ show st
-  when (T.unpack msg == "ready") $ modifyMVar_ state $ \s -> do
+  when (T.unpack msg == "ready" || T.unpack msg == "unready") $ modifyMVar_ state $ \s -> do
       let ourGame = find (elem (cliName client) . map name . players) (fst s)
       if isJust ourGame
-        then return ((fromJust ourGame) {ready = True} : delete (fromJust ourGame) (fst s),snd s)
+        then do
+          let ourNewGame = (fromJust ourGame) { players = map (\x -> if name x == cliName client then x {playerReady = T.unpack msg == "ready"} else x) (players $ fromJust ourGame) }
+          return (ourNewGame : delete (fromJust ourGame) (fst s),snd s)
         else return s
   modifyMVar_ state $ \s -> do
     let ourClient = head $ filter ((==cliName client) . cliName) (snd s)

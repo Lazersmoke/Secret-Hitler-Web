@@ -4,31 +4,37 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   </head>
   <body>
-    <input type="text" id="inputbox"></input>
-    <button id="inputbutton">Join</button>
-    <div id="connectionbox">
-      <span id="connectiontext">Connected</span>
+    <div id="inputdiv">
+      <input type="text" id="inputbox"></input>
+      <button id="inputbutton">Join</button>
+    </div>
+    <div id="connectiondiv">
       <img src="disconnected.png" id = "connectionindicator"></img>
+      <span id="connectiontext">Connected</span>
     </div>
     <div id="sharddiv">
       <select id="shardselect"></select>
       <button id="shardsubmit">Connect</button>
     </div>
+    <div id="statusdiv">
+      <p id="statusbar"></p>
+    </div>
+    <div id="playerbox"></div>
     <div id="votebox">
       <img src="ja_card.png" id="JAbutton"></img>
       <img src="nein_card.png" id="NEINbutton"></img>
     </div>
-    <div id="playerbox">
-    </div>
-    <div id="cardbox">
-    </div>
+    <div id="cardbox"></div>
     <div id="chatdiv">
-      <textarea rows="8" cols="100" readonly id="chatbox"></textarea>
+      <textarea readonly id="chatbox"></textarea>
       <br>
       <input type="text" id="chatinput"></input>
       <button id="chatsubmit">Send</button>
     </div>
-    <div id="statusbar">
+    <div id="statusbox">
+      <p id="statusbarlong"></p>
+    </div>
+    <div id="gameboarddiv">
       <img id="liberalboard" src="liberalboard.png" class="gameboard"></img>
       <img id="liberaloverlay" class = "gameboard"></img>
       <img id="fascistboard" src="fascistboard5.png" class="gameboard"></img>

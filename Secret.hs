@@ -34,6 +34,7 @@ chatLoop st = forever $ do
 mainLoop :: MVar ServerState -> IO ()
 mainLoop st = forever $ do 
   pruneEmptyGames st
+  markReadyGames st
   state <- readMVar st
   if any ready (fst state)
     then do
@@ -41,7 +42,7 @@ mainLoop st = forever $ do
       consoleLog $ "Shard " ++ shardName ourGame ++ " reports ready"
       modifyMVar_ st $ \s -> do
         let theGame = fromJust . find ready $ fst s
-        return (theGame {ready = False} : delete theGame (fst s),snd s)
+        return (theGame {players = map (\x -> x {playerReady = False}) (players theGame), ready = False} : delete theGame (fst s),snd s)
       --Spawn new thread to deal with each game
       _ <- forkIO $ do
         rngesus <- newStdGen
@@ -64,12 +65,15 @@ mainLoop st = forever $ do
     else threadDelay 100000 
 
 pruneEmptyGames :: MVar ServerState -> IO ()
-pruneEmptyGames state = modifyMVar_ state $ \s -> return (filter (null . players) $ fst s, snd s)
+pruneEmptyGames state = modifyMVar_ state $ \s -> return (filter (not . null . players) $ fst s, snd s)
   
+markReadyGames :: MVar ServerState -> IO ()
+markReadyGames state = modifyMVar_ state $ \s -> return (map (\x -> x {ready = all playerReady . players $ x}) $ fst s, snd s)
+
 givePlayerRoles :: GameState -> IO ()
 givePlayerRoles gs = do
   --Tell everyone who they are
-  tellEveryone ("Info|The order of play is: " ++ (unwords . map name $ players gs)) gs
+  tellEveryone ("Info|The order of play is: " ++ (intercalate "\n" . map name $ players gs)) gs
   forM_ (players gs) (\p -> flip tellPlayer p $ "Info|You are " ++ (keyFromIdent . secretIdentity $ p))
   if (length . players $ gs) > 6
     then forM_ (filter (hasId $ NotHitler Fascist) $ players gs) tellEverything
@@ -85,7 +89,7 @@ givePlayerRoles gs = do
       [("Info|The Liberals are ", NotHitler Liberal),
        ("Info|The Fascists are ", NotHitler Fascist),
        ("Info|Hitler is ", Hitler)]
-      (\(a,b) -> flip tellPlayer p $ a ++ (unwords . map name . filter (hasId b) $ players gs))
+      (\(a,b) -> flip tellPlayer p $ a ++ (intercalate "\n" . map name . filter (hasId b) $ players gs))
 
 doRound :: GameState -> MVar ServerState -> IO GameState
 doRound state sstate = do

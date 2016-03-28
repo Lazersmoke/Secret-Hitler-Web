@@ -62,7 +62,7 @@ bootstrapGame gs gen = if playerCount < 5
                          then (gs,False)--Not enough players, so return failure
                          else (gs' {nextPresident = findNextPresident gs'},True)
   where
-    gs' = gs {players = zipWith (\a b -> b {secretIdentity = a}) shuffledIdMap (players gs),
+    gs' = gs {players = zipWith (\a b -> b {secretIdentity = a, playerReady = False}) shuffledIdMap (players gs),
               ready = False}
     playerCount = length . players $ gs
     shuffledIdMap = shuffle' identityMap (length identityMap) gen
