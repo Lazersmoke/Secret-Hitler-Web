@@ -14,7 +14,7 @@ import qualified Control.Monad.Parallel as Parr
 -- Control flow impure code ---------------------------------------------------
 main :: IO ()
 main = do
-  state <- newMVar $ ([],[])
+  state <- newMVar ([],[])
   --We really don't need the thread ids; just let them die with the app
   _ <- forkIO $ mainLoop state
   _ <- forkIO $ chatLoop state
@@ -23,12 +23,12 @@ main = do
 chatLoop :: MVar ServerState -> IO ()
 chatLoop st = forever $ do
   state <- readMVar st
-  let clients = (snd state)
+  let clients = snd state
   -- mapMaybe removes Nothings from the result
   modifyMVar_ st $ \mods ->
-    return $ (fst mods, map (\x -> x {cliComms = filter (not . isPrefixOf "Chat|") $ cliComms x}) $ snd mods)
-  let messages = mapMaybe (flip getFromClient "Chat|") clients
-  mapM_ (flip tellClients clients) messages
+    return (fst mods, map (\x -> x {cliComms = filter (not . isPrefixOf "Chat|") $ cliComms x}) $ snd mods)
+  let messages = mapMaybe (`getFromClient` "Chat|") clients
+  mapM_ (`tellClients` clients) messages
   threadDelay 10000 
   
 mainLoop :: MVar ServerState -> IO ()
@@ -41,7 +41,7 @@ mainLoop st = forever $ do
       consoleLog $ "Shard " ++ shardName ourGame ++ " reports ready"
       modifyMVar_ st $ \s -> do
         let theGame = fromJust . find ready $ fst s
-        return $ (theGame {ready = False} : (delete theGame $ fst s),snd s)
+        return (theGame {ready = False} : delete theGame (fst s),snd s)
       --Spawn new thread to deal with each game
       _ <- forkIO $ do
         rngesus <- newStdGen
@@ -56,8 +56,7 @@ mainLoop st = forever $ do
               Victory Fascist -> "Info|FASCISTS WIN!!!" 
               Victory Liberal -> "Info|LIBERALS WIN!!!" 
             -- ServerState updated upon return of playGame
-            modifyMVar_ st $ \s -> do
-              return $ (delete bootedGame $ fst s, snd s)
+            modifyMVar_ st $ \s -> return (delete bootedGame $ fst s, snd s)
             consoleLog $ "Shard " ++ shardName bootedGame ++ " terminated with " ++ show stopcode
       --Must match return type of threadDelay
       return ()
@@ -65,12 +64,12 @@ mainLoop st = forever $ do
     else threadDelay 100000 
 
 pruneEmptyGames :: MVar ServerState -> IO ()
-pruneEmptyGames state = modifyMVar_ state $ \s -> return (filter ((>0) . length . players) $ fst s, snd s)
+pruneEmptyGames state = modifyMVar_ state $ \s -> return (filter (null . players) $ fst s, snd s)
   
 givePlayerRoles :: GameState -> IO ()
 givePlayerRoles gs = do
   --Tell everyone who they are
-  tellEveryone ("Info|The order of play is: " ++ (intercalate " " . map name $ players gs)) gs
+  tellEveryone ("Info|The order of play is: " ++ (unwords . map name $ players gs)) gs
   forM_ (players gs) (\p -> flip tellPlayer p $ "Info|You are " ++ (keyFromIdent . secretIdentity $ p))
   if (length . players $ gs) > 6
     then forM_ (filter (hasId $ NotHitler Fascist) $ players gs) tellEverything
@@ -81,12 +80,12 @@ givePlayerRoles gs = do
                         NotHitler Fascist -> "fascist"
                         Hitler -> "hitler"
                         NoIdentity -> error "No Identity midgame rip"
-    hasId s p = (==s) . secretIdentity $ p
+    hasId s = (==s) . secretIdentity
     tellEverything p = forM_ 
       [("Info|The Liberals are ", NotHitler Liberal),
        ("Info|The Fascists are ", NotHitler Fascist),
        ("Info|Hitler is ", Hitler)]
-      (\(a,b) -> flip tellPlayer p $ a ++ (intercalate " ". map name . filter (hasId b) $ players gs))
+      (\(a,b) -> flip tellPlayer p $ a ++ (unwords . map name . filter (hasId b) $ players gs))
 
 doRound :: GameState -> MVar ServerState -> IO GameState
 doRound state sstate = do
@@ -100,10 +99,10 @@ doRound state sstate = do
     else if electionTracker state' == 3
       then do
         tellEveryone "Info|The vote failed too many times, so the top policy card was enacted" state'
-        flip tellEveryone state' $ case (head . deck $ state') of
+        flip tellEveryone state' $ case head . deck $ state' of
           Policy Fascist -> "Info|A Fascist Policy was played!"
           Policy Liberal -> "Info|A Liberal Policy was played!"
-        return $ (passPolicy state' (head . deck $ state')) {electionTracker = 0, deck = tail . deck $ state'}
+        return $ (passPolicy state' . head . deck $ state') {electionTracker = 0, deck = tail . deck $ state'}
       else return state' -- Election tracker modified in electGovernment
 
 playGame :: GameState -> MVar ServerState -> IO StopCode
@@ -111,9 +110,8 @@ playGame st sstate = do
   writeState st sstate
   nst <- doRound st sstate
   writeState nst sstate
-  if isJust $ stopGame nst
-    then return . fromJust . stopGame $ nst
-    else playGame nst sstate
+  maybe (playGame nst sstate) return (stopGame nst)
+
 electGovernment :: GameState -> MVar ServerState -> IO (GameState,Bool) -- Bool is True if a new government is in
 electGovernment state sstate = do
   -- Select new president from helper function
@@ -127,7 +125,7 @@ electGovernment state sstate = do
   -- Ask the new president for the name of the next chancellor
   newChance <- fromJust . flip getPlayer state <$> 
     askPlayerUntil 
-      (\x -> ((elem DummyPlayer $ previousGovernment state') || x `notElem` (map name $ previousGovernment state')) && x /= (name . president $ state') && x `isPlayerIn` state')
+      (\x -> (elem DummyPlayer (previousGovernment state') || x `notElem` map name (previousGovernment state')) && x /= (name . president $ state') && x `isPlayerIn` state')
       "Chancellor" 
       sstate newPres 
   tellEveryone ("Info|The proposed government is: " ++ name newPres ++ " as President and " ++ name newChance ++ " as Chancellor") state'
@@ -138,13 +136,13 @@ electGovernment state sstate = do
   if votePass votes
     -- If it does, put in the new pres and chan and prevGov and return the new state
     then do
-      tellEveryone ("Info|The vote passed!") state
+      tellEveryone "Info|The vote passed!" state
       tellEveryone ("Info|The new government is: " ++ name newPres ++ " as President and " ++ name newChance ++ " as Chancellor") state
       return (state' {chancellor = newChance}, True)
     -- Otherwise, advance the election tracker and return false for failure
     else do
       tellEveryone ("Info|The vote failed! The election tracker is now in posisition " ++ (show . (+1) . electionTracker $ state) ++ "!") state
-      return (state' {electionTracker = (electionTracker state) + 1}, False)
+      return (state' {electionTracker = electionTracker state + 1}, False)
   where
     playerList = players state
 
@@ -156,14 +154,14 @@ legislativeSession state sstate = do
     askPlayerUntil 
       -- The card is in the top 3 cards
       (isPolicyIn drawn)
-      ("Discard|" ++ (intercalate "," $ map show drawn))
+      ("Discard|" ++ intercalate "," (map show drawn))
       sstate (president state)
   let cards = delete discard drawn
   -- Ask the chancellor to play a card until a valid choice is made
   playcardr <- 
     askPlayerUntil 
       (\x -> (fascistPolicies state > 4 && x=="Veto") || isPolicyIn cards x) 
-      ("Play|" ++ (intercalate "," $ map show cards)) 
+      ("Play|" ++ intercalate "," (map show cards)) 
       sstate (chancellor state)
   playcardm <- 
     if playcardr /= "Veto"
@@ -174,28 +172,26 @@ legislativeSession state sstate = do
           then return Nothing
           else Just . read <$> askPlayerUntil 
                  (isPolicyIn cards) 
-                 ("Play|" ++ (concat . intersperse "," . map show $ delete discard drawn))
+                 ("Play|" ++ (intercalate "," . map show $ delete discard drawn))
                  sstate (chancellor state)
   if isJust playcardm
     then do
       let playcard = fromJust playcardm 
       -- Move first three cards of the old deck to the back
-      let newdeck = delete playcard $ (drop 3 $ deck state) ++ drawn
+      let newdeck = drop 3 $ deck state ++ delete playcard drawn
       --Pass the policy and check victories
       let newstate = applyVictories $ passPolicy (state {deck = newdeck}) playcard
       --Do the special fascist action if a fascist policy is passed
-      newstate' <- case playcard of
+      case playcard of
         Policy Fascist -> do
-          tellEveryone ("Info|A Fascist Policy was played!") state
+          tellEveryone "Info|A Fascist Policy was played!" state
           fascistAction newstate sstate
         Policy Liberal -> do 
-          tellEveryone ("Info|A Liberal Policy was played!") state
+          tellEveryone "Info|A Liberal Policy was played!" state
           return newstate
-      -- return the played card and the reshuffled deck without the playcard in it
-      return newstate' 
   else do
     tellEveryone "Info|The agenda was vetoed!" state
-    return $ state {deck = (drop 3 $ deck state) ++ drawn}
+    return $ state {deck = (drop 3 . deck $ state) ++ drawn}
   where
     drawn = take 3 $ deck state
 
@@ -205,7 +201,7 @@ fascistAction gs sstate
   | playerCount < 9 = useActionSet [return gs, investigate, specialElection, bullet, bullet, return gs]
   | otherwise = useActionSet [investigate, investigate, specialElection, bullet, bullet, return gs]
   where
-   useActionSet xs = xs !! ((fascistPolicies gs) - 1)
+   useActionSet xs = xs !! (fascistPolicies gs - 1)
    playerCount = length . players $ gs
    --President looks at top three cards from deck
    peekThree = do 
@@ -215,29 +211,30 @@ fascistAction gs sstate
    --President looks at another player's secret identity
    investigate = do
      player <- fromJust . flip getPlayer gs <$> askPlayerUntil (`isPlayerIn` gs) "Investigate" sstate (president gs)
-     tellPlayer ("Info|Player \"" ++(name player)++ "\" is " ++ (show . secretIdentity $ player)) (president gs)
-     tellEveryone ("Info|The President (" ++(name.president$gs)++ ") has Investigated " ++ (name player) ++ "!") gs
+     tellPlayer ("Info|Player \"" ++ name player ++ "\" is " ++ (show . secretIdentity $ player)) (president gs)
+     tellEveryone ("Info|The President (" ++(name.president$gs)++ ") has Investigated " ++ name player ++ "!") gs
      return gs
    --President chooses next canidate
    specialElection = do
      player <- fromJust . flip getPlayer gs <$> askPlayerUntil (`isPlayerIn` gs) "Special Election" sstate (president gs)
-     tellEveryone ("Info|" ++ (name . president $ gs) ++ " has called a special election, with " ++ (name player) ++ " as the next presidential candidate") gs
+     tellEveryone ("Info|" ++ (name . president $ gs) ++ " has called a special election, with " ++ name player ++ " as the next presidential candidate") gs
      return $ gs {nextPresident = player}
    --President shoots (removes from game) a player
    bullet = do
      player <- fromJust . flip getPlayer gs <$> askPlayerUntil (`isPlayerIn` gs) "Kill" sstate (president gs)
-     tellEveryone ("Info|" ++ (name . president $ gs) ++ " has shot and killed " ++ (name player)) gs
+     tellEveryone ("Info|" ++ (name . president $ gs) ++ " has shot and killed " ++ name player) gs
      if secretIdentity player == Hitler
        then do
          tellEveryone "Info|Hitler was killed!" gs
-         return $ gs {stopGame = Just $ Victory Liberal, players = (delete player $ players gs)}
+         return $ gs {stopGame = Just $ Victory Liberal, players = delete player $ players gs}
        else do
-         tellEveryone ("Info|Rest in pieces, " ++ (name player)) gs
-         tellEveryone ("Info|Confirmed not Hitler: " ++ (name player)) gs
-         tellEveryone ("Disconnect|" ++ (name player)) gs
+         tellEveryone ("Info|Rest in pieces, " ++ name player) gs
+         tellEveryone ("Info|Confirmed not Hitler: " ++ name player) gs
+         tellEveryone ("Disconnect|" ++ name player) gs
+         if name player == (name . nextPresident $ gs)
+           then return $ gs {nextPresident = findNextPresident gs, players = delete player $ players gs}
          --Return the game without the player in it. RIP player
-         return $ gs {players = (delete player $ players gs)}
+           else return $ gs {players = delete player $ players gs}
 
 writeState :: GameState -> MVar ServerState -> IO ()
-writeState gs ss = modifyMVar_ ss $ \s -> do
-  return $ (gs : (filter ((/=players gs) . players) $ fst s), snd s)
+writeState gs ss = modifyMVar_ ss $ \s -> return (gs : filter ((/=players gs) . players) (fst s), snd s)

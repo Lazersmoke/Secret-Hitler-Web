@@ -10,7 +10,7 @@ hitlerElected :: GameState -> Bool
 hitlerElected st = fascistPolicies st >= 3 && (secretIdentity . chancellor $ st) == Hitler
 -- | Returns True if The vote should pass (majority Ja)
 votePass :: [Vote] -> Bool
-votePass vs = length (filter (Ja ==) vs) > (length vs)`div`2
+votePass vs = length (filter (Ja ==) vs) > length vs `div` 2
 -- | Returns a gamestate in which the selected policy has been passed
 passPolicy :: GameState -> Policy -> GameState
 passPolicy s p = s {fascistPolicies = fascistPolicies s + change Fascist,
@@ -18,7 +18,7 @@ passPolicy s p = s {fascistPolicies = fascistPolicies s + change Fascist,
                where change team = if p == Policy team then 1 else 0
 -- | Get the next player for president. Next in list after president or first player if no president
 findNextPresident :: GameState -> Player --Finds the next player that should be president
-findNextPresident state = if (president state) `elem` (players state)
+findNextPresident state = if president state `elem` players state
   -- If the president exists, Take the first player after you drop everyone upto and including the president 
   then head . tail $ dropWhile (/=president state) (cycle $ players state) 
   -- If the president is not in the players list, then take the first player instead
@@ -35,14 +35,13 @@ getFromClient :: Client -> String -> Maybe String
 getFromClient cl prefix = find (prefix `isPrefixOf`) (cliComms cl)
 
 applyVictories :: GameState -> GameState
-applyVictories gs = if fascistPolicies gs == 6
-                     then gs {stopGame = Just $ Victory Fascist}
-                     else if liberalPolicies gs == 5
-                       then gs {stopGame = Just $ Victory Liberal}
-                       else gs
+applyVictories gs 
+  | fascistPolicies gs == 6 = gs {stopGame = Just $ Victory Fascist}
+  | liberalPolicies gs == 5 = gs {stopGame = Just $ Victory Liberal}
+  | otherwise = gs
 
 freshDeck :: RandomGen gen => gen -> [Policy]
-freshDeck gen = shuffle' (replicate 6 (Policy Liberal) ++ replicate 11 (Policy Fascist)) 17 gen
+freshDeck = shuffle' (replicate 6 (Policy Liberal) ++ replicate 11 (Policy Fascist)) 17 
 
 isVote :: String -> Bool
 isVote = (||) <$> (=="Ja") <*> (=="Nein")
@@ -68,9 +67,9 @@ bootstrapGame gs gen = if playerCount < 5
     playerCount = length . players $ gs
     shuffledIdMap = shuffle' identityMap (length identityMap) gen
     identityMap
-      |playerCount < 7 = take playerCount $ [Hitler, NotHitler Fascist] ++ (repeat $ NotHitler Liberal)
-      |playerCount < 9 = take playerCount $ Hitler:replicate 2 (NotHitler Fascist) ++(repeat $ NotHitler Liberal)
-      |otherwise = take playerCount $ Hitler:replicate 3 (NotHitler Fascist) ++ (repeat $ NotHitler Liberal)
+      |playerCount < 7 = take playerCount $ [Hitler, NotHitler Fascist] ++ repeat (NotHitler Liberal)
+      |playerCount < 9 = take playerCount $ Hitler:replicate 2 (NotHitler Fascist) ++ repeat (NotHitler Liberal)
+      |otherwise = take playerCount $ Hitler:replicate 3 (NotHitler Fascist) ++ repeat (NotHitler Liberal)
 
 newGameState :: RandomGen gen => [Player] -> gen -> GameState
 newGameState plas gen = GameState {players = plas,

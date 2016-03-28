@@ -12,7 +12,7 @@ data Vote = Ja | Nein deriving (Show,Eq,Read)
 data Team = Liberal | Fascist deriving (Show,Eq,Read)
 
 instance Show Client where
-  show cli = (cliName cli) ++ " Que:" ++ (concat . cliComms $ cli)
+  show cli = cliName cli ++ " Que:" ++ (concat . cliComms $ cli)
 
 instance Eq Client where
   (==) a b = cliName a == cliName b
