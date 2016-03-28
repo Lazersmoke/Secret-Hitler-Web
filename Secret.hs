@@ -98,7 +98,12 @@ doRound state sstate = do
         return state' {stopGame = Just $ Victory Fascist}
       else legislativeSession state' sstate
     else if electionTracker state' == 3
-      then return $ (passPolicy state' (head . deck $ state')) {electionTracker = 0, deck = tail . deck $ state'}
+      then do
+        tellEveryone "Info|The vote failed too many times, so the top policy card was enacted" state'
+        flip tellEveryone state' $ case (head . deck $ state') of
+          Policy Fascist -> "Info|A Fascist Policy was played!"
+          Policy Liberal -> "Info|A Liberal Policy was played!"
+        return $ (passPolicy state' (head . deck $ state')) {electionTracker = 0, deck = tail . deck $ state'}
       else return state' -- Election tracker modified in electGovernment
 
 playGame :: GameState -> MVar ServerState -> IO StopCode

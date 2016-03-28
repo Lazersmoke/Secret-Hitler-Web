@@ -242,8 +242,6 @@ function showVote(name, vote){
   
 function addPlayer(name, filename, change = false){
   filename = filename || "player.png"
-  $PLAYERLIST$.push(name)
-  updateFascBoard()
   var pb = document.getElementById("playerbox")
 
   var olddiv = document.getElementById(name + "div")
@@ -276,7 +274,9 @@ function addPlayer(name, filename, change = false){
     newdiv.id=name+"div"
     return
   }
+  $PLAYERLIST$.push(name)
   pb.appendChild(newdiv)
+  updateFascBoard()
   newdiv.id=name+"div"
 }
 function setCardcount(lib,fasc){
